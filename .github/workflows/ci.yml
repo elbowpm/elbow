@@ -1,0 +1,47 @@
+name: CI
+
+permissions:
+  contents: read
+
+on:
+  push:
+  pull_request:
+  workflow_call:
+
+env:
+  BUN_VERSION: "1.4.2"
+  BEND_VERSION: "2.0.25"
+  BEND_SHA256_LINUX_X64: "91c0e2640f8d2e3e73fd3dd62ed4d178ce9a6f7ce8f8980b4dc4abf7a6f9ccd4"
+  BEND_NO_TELEMETRY: "1"
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      - name: Install Bend
+        run: |
+          home="$HOME/.bend"
+          mkdir -p "$home/bin"
+          name="bend-${BEND_VERSION}-linux-x64.tar.gz"
+          curl --proto '=https' --tlsv1.2 -fsSL -o "/tmp/${name}" "https://github.com/bendlang/bend/releases/download/v${BEND_VERSION}/${name}"
+          echo "${BEND_SHA256_LINUX_X64}  /tmp/${name}" | sha256sum -c -
+          tmp="$(mktemp -d)"
+          tar -xzf "/tmp/${name}" -C "$tmp"
+          mv "$tmp/bend/bend2" "$tmp/bend/guide" "$home/"
+          mv "$tmp/bend/bin/bend" "$home/bin/bend"
+          echo "$home/bin" >> "$GITHUB_PATH"
+          "$home/bin/bend" version
+      - name: Exercise real registry and hub
+        run: |
+          tmp="$(mktemp -d)"
+          trap 'rm -rf "$tmp"' EXIT
+          printf 'import Base\n\ndef main() -> U32:\n  Encoding.nibble(10)\n' > "$tmp/main.bend"
+          cd "$tmp"
+          export BEND_LIB="$tmp/lib"
+          bun "$GITHUB_WORKSPACE/elbow.ts" add encoding@0.1.0
+          bun "$GITHUB_WORKSPACE/elbow.ts" install --locked
+          test "$(bend main.bend)" = 97

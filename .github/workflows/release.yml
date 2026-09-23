@@ -1,0 +1,40 @@
+# Tag push (v*): publish a version-pinned tarball of the CLI (elbow.ts as bin/elbow; requires Bun on PATH).
+name: Release CLI
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    uses: ./.github/workflows/ci.yml
+
+  release:
+    needs: smoke
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Package elbow CLI
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          root="elbow-${version}"
+          mkdir -p "${root}/bin"
+          cp elbow.ts "${root}/bin/elbow"
+          chmod +x "${root}/bin/elbow"
+          printf '%s\n' "$version" > "${root}/VERSION"
+          tar -czf "elbow-${version}.tar.gz" "$root"
+          sha256sum "elbow-${version}.tar.gz" | tee "elbow-${version}.tar.gz.sha256"
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            elbow-*.tar.gz
+            elbow-*.tar.gz.sha256
