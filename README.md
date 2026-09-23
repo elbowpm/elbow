@@ -20,10 +20,11 @@ name="elbow-${version}-${target}"
 curl -fsSLO "https://github.com/elbowpm/elbow/releases/download/v${version}/${name}.tar.gz"
 curl -fsSLO "https://github.com/elbowpm/elbow/releases/download/v${version}/${name}.tar.gz.sha256"
 shasum -a 256 -c "${name}.tar.gz.sha256" # or sha256sum -c
-tar -xzf "${name}.tar.gz" && mv "${name}/bin/elbow" "$HOME/.local/bin/elbow"
+tar -xzf "${name}.tar.gz"
+mkdir -p "$HOME/.local/bin" && mv "${name}/bin/elbow" "$HOME/.local/bin/elbow"
 ```
 
-Elbow uses the public registry at `https://elbow.paymahn.workers.dev` unless `ELBOW_REGISTRY` is set. Browse packages there.
+Elbow uses the public registry at `https://elbow.paymahn.workers.dev` unless `ELBOW_REGISTRY` is set. [Browse its packages](https://elbow.paymahn.workers.dev/) to see names, versions, and hub hashes.
 
 ## Use
 
