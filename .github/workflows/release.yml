@@ -1,4 +1,4 @@
-# Tag push (v*): publish a version-pinned tarball of the CLI (elbow.ts as bin/elbow; requires Bun on PATH).
+# Tag push (v*): publish standalone elbow binaries for macOS and Linux, plus a version-pinned install.sh.
 name: Release CLI
 
 on:
@@ -9,32 +9,59 @@ on:
 permissions:
   contents: read
 
+env:
+  BUN_VERSION: "1.4.2"
+
 jobs:
   smoke:
     uses: ./.github/workflows/ci.yml
 
-  release:
+  build:
     needs: smoke
+    strategy:
+      matrix:
+        include:
+          - { runner: ubuntu-latest, target: linux-x64 }
+          - { runner: ubuntu-latest, target: linux-arm64 }
+          # macOS binaries are built on macOS so Bun can sign them for Apple Silicon.
+          - { runner: macos-latest, target: darwin-arm64 }
+          - { runner: macos-latest, target: darwin-x64 }
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      - name: Build and package
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          root="elbow-${version}-${{ matrix.target }}"
+          mkdir -p "${root}/bin"
+          bun build --compile --target="bun-${{ matrix.target }}" elbow.ts --outfile "${root}/bin/elbow"
+          printf '%s\n' "$version" > "${root}/VERSION"
+          tar -czf "${root}.tar.gz" "$root"
+          shasum -a 256 "${root}.tar.gz" | tee "${root}.tar.gz.sha256"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.target }}
+          path: elbow-*.tar.gz*
+
+  release:
+    needs: build
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v4
-
-      - name: Package elbow CLI
-        run: |
-          version="${GITHUB_REF_NAME#v}"
-          root="elbow-${version}"
-          mkdir -p "${root}/bin"
-          cp elbow.ts "${root}/bin/elbow"
-          chmod +x "${root}/bin/elbow"
-          printf '%s\n' "$version" > "${root}/VERSION"
-          tar -czf "elbow-${version}.tar.gz" "$root"
-          sha256sum "elbow-${version}.tar.gz" | tee "elbow-${version}.tar.gz.sha256"
-
+      - uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+      - name: Pin install.sh to this release
+        run: sed -i "s/@VERSION@/${GITHUB_REF_NAME#v}/" install.sh
       - uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
           files: |
             elbow-*.tar.gz
             elbow-*.tar.gz.sha256
+            install.sh

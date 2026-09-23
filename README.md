@@ -4,20 +4,26 @@ Names and versions for [Bend](https://bend-lang.com/) hub packages. Elbow writes
 
 ## Install
 
-Requires [Bend 2.0.25](https://bend-lang.com/install.sh) and [Bun 1.4.2](https://bun.sh/docs/installation) on macOS or Linux (including WSL). Install Bend and Bun using their official instructions, then install a pinned Elbow release:
+Elbow is a standalone binary for macOS and Linux (including WSL), x64 or arm64. It runs programs with [Bend 2.0.25](https://bend-lang.com/install.sh), so install Bend first. Then install Elbow:
 
 ```sh
-version=0.1.1
-curl -fsSLO "https://github.com/elbowpm/elbow/releases/download/v${version}/elbow-${version}.tar.gz"
-curl -fsSLO "https://github.com/elbowpm/elbow/releases/download/v${version}/elbow-${version}.tar.gz.sha256"
-shasum -a 256 -c "elbow-${version}.tar.gz.sha256" # Linux: sha256sum -c
-mkdir -p "$HOME/.local/bin"
-tar -xzf "elbow-${version}.tar.gz" --strip-components=2 -C "$HOME/.local/bin" "elbow-${version}/bin/elbow"
-export PATH="$HOME/.local/bin:$PATH" # add this to your shell profile
-elbow help
+curl -fsSL https://elbow.paymahn.workers.dev/install.sh | sh
 ```
 
-Pin the version in automation instead of installing from `main`. No package-manager install or checkout symlink is needed. Elbow uses the public registry at `https://elbow.paymahn.workers.dev` unless `ELBOW_REGISTRY` is set.
+The script downloads the binary for your platform from the latest [GitHub release](https://github.com/elbowpm/elbow/releases), checks its SHA-256, and puts it in `~/.local/bin`. The script is also published with each release, so you can read it before you run it.
+
+In automation, pin a version instead:
+
+```sh
+version=0.2.0 target=linux-x64 # or linux-arm64, darwin-arm64, darwin-x64
+name="elbow-${version}-${target}"
+curl -fsSLO "https://github.com/elbowpm/elbow/releases/download/v${version}/${name}.tar.gz"
+curl -fsSLO "https://github.com/elbowpm/elbow/releases/download/v${version}/${name}.tar.gz.sha256"
+shasum -a 256 -c "${name}.tar.gz.sha256" # or sha256sum -c
+tar -xzf "${name}.tar.gz" && mv "${name}/bin/elbow" "$HOME/.local/bin/elbow"
+```
+
+Elbow uses the public registry at `https://elbow.paymahn.workers.dev` unless `ELBOW_REGISTRY` is set. Browse packages there.
 
 ## Use
 
@@ -91,4 +97,4 @@ Publishing uploads the Bend package to the hub, then registers its immutable nam
 
 ## Develop
 
-`bun elbow.ts help` prints the available commands. CI installs Bend and Bun, then exercises this CLI against the deployed registry and a real hub package. The registry Worker, D1 schema, and deployment workflow are maintained separately in a private repository.
+Development needs [Bun 1.4.2](https://bun.sh/docs/installation). `bun elbow.ts help` prints the available commands, and `bun build --compile elbow.ts --outfile elbow` builds the standalone binary. CI builds that binary, then exercises it against the deployed registry and a real hub package. The registry Worker, D1 schema, and deployment workflow are maintained separately in a private repository.
