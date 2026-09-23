@@ -35,6 +35,10 @@ jobs:
           mv "$tmp/bend/bin/bend" "$home/bin/bend"
           echo "$home/bin" >> "$GITHUB_PATH"
           "$home/bin/bend" version
+      - name: Build standalone binary
+        run: |
+          sh -n install.sh
+          bun build --compile elbow.ts --outfile "$RUNNER_TEMP/elbow"
       - name: Exercise real registry and hub
         run: |
           tmp="$(mktemp -d)"
@@ -42,14 +46,14 @@ jobs:
           printf 'import Base\n\ndef main() -> U32:\n  Encoding.nibble(10)\n' > "$tmp/main.bend"
           cd "$tmp"
           export BEND_LIB="$tmp/lib"
-          bun "$GITHUB_WORKSPACE/elbow.ts" add encoding@0.1.0
-          bun "$GITHUB_WORKSPACE/elbow.ts" install --locked 2> "$tmp/clean.err"
+          "$RUNNER_TEMP/elbow" add encoding@0.1.0
+          "$RUNNER_TEMP/elbow" install --locked 2> "$tmp/clean.err"
           bun -e 'if ((await Bun.file(process.argv[1]).text()).includes("foreign code")) process.exit(1)' "$tmp/clean.err"
           test "$(bend main.bend)" = 97
-          bun "$GITHUB_WORKSPACE/elbow.ts" add http@0.9.2 2> "$tmp/add.err"
-          bun "$GITHUB_WORKSPACE/elbow.ts" install --locked 2> "$tmp/install.err"
-          bun "$GITHUB_WORKSPACE/elbow.ts" list > "$tmp/list.out" 2> "$tmp/list.err"
+          "$RUNNER_TEMP/elbow" add http@0.9.2 2> "$tmp/add.err"
+          "$RUNNER_TEMP/elbow" install --locked 2> "$tmp/install.err"
+          "$RUNNER_TEMP/elbow" list > "$tmp/list.out" 2> "$tmp/list.err"
           bun -e 'for (const file of process.argv.slice(1)) { const warning = await Bun.file(file).text(); if (!warning.includes("foreign code") || !warning.includes("effs/wire.c")) process.exit(1) }' "$tmp/add.err" "$tmp/install.err" "$tmp/list.err"
           printf 'import Base\nimport 0x00000000000000000000000000000000/missing.bend as Missing\n\ndef main() -> U32:\n  1\n' > "$tmp/main.bend"
-          BEND_HUB=http://127.0.0.1:1 bun "$GITHUB_WORKSPACE/elbow.ts" list > "$tmp/unknown.out" 2> "$tmp/unknown.err"
+          BEND_HUB=http://127.0.0.1:1 "$RUNNER_TEMP/elbow" list > "$tmp/unknown.out" 2> "$tmp/unknown.err"
           bun -e 'const out = await Bun.file(process.argv[1]).text(); const err = await Bun.file(process.argv[2]).text(); if (!out.includes("not in index") || !err.includes("foreign-code status unknown")) process.exit(1)' "$tmp/unknown.out" "$tmp/unknown.err"
