@@ -7,7 +7,7 @@ Names and versions for [Bend](https://bend-lang.com/) hub packages. Elbow writes
 Requires [Bend 2.0.25](https://bend-lang.com/install.sh) and [Bun 1.4.2](https://bun.sh/docs/installation) on macOS or Linux (including WSL). Install Bend and Bun using their official instructions, then install a pinned Elbow release:
 
 ```sh
-version=0.1.0
+version=0.1.1
 curl -fsSLO "https://github.com/elbowpm/elbow/releases/download/v${version}/elbow-${version}.tar.gz"
 curl -fsSLO "https://github.com/elbowpm/elbow/releases/download/v${version}/elbow-${version}.tar.gz.sha256"
 shasum -a 256 -c "elbow-${version}.tar.gz.sha256" # Linux: sha256sum -c
@@ -87,7 +87,7 @@ elbow publish path/to/package.bend my-package@1.0.0
 unset ELBOW_TOKEN
 ```
 
-Publishing uploads the Bend package to the hub, then registers its immutable name/version/hash. The first GitHub account ID to publish a name owns it. Publishing requires network access; installing does **not** require a token. Inspect packages before running them: `.js` and `.c` foreign effects can execute host code and are not covered by Bend proofs.
+Publishing uploads the Bend package to the hub, then registers its immutable name/version/hash. The first GitHub account ID to publish a name owns it. Publishing requires network access; installing does **not** require a token. `add`, `list`, `install --locked`, and `publish` warn when a verified hub manifest contains `.c` or `.js` files (including transitive packages). Inspect those files before running the package: foreign effects execute host code and Bend proofs do not cover them.
 
 ## Develop
 

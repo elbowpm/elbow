@@ -81,7 +81,7 @@ function imports(source: string): { hash: string; entry: string }[] {
   return found;
 }
 
-async function packageGraph(roots: string[]): Promise<Package[]> {
+async function packageGraph(roots: string[], verifyForeignFiles = true): Promise<Package[]> {
   const graph = new Map<string, Package>();
   async function visit(hash: string): Promise<void> {
     if (graph.has(hash)) return;
@@ -99,6 +99,7 @@ async function packageGraph(roots: string[]): Promise<Package[]> {
     const dependencies = new Set<string>();
     graph.set(hash, { hash, files, dependencies: [] });
     for (const file of files) {
+      if (!verifyForeignFiles && !file.path.endsWith(".bend")) continue;
       const response = await fetch(`${HUB}/${hash}/${file.path}`);
       if (!response.ok) die(`cannot fetch ${hash}/${file.path}`);
       const body = Buffer.from(await response.arrayBuffer());
@@ -112,6 +113,13 @@ async function packageGraph(roots: string[]): Promise<Package[]> {
   }
   for (const root of roots) await visit(root);
   return [...graph.values()].sort((a, b) => a.hash.localeCompare(b.hash));
+}
+
+function warnForeign(packages: Package[]): void {
+  for (const pkg of packages) {
+    const files = pkg.files.filter((file) => /\.(?:c|js)$/.test(file.path)).map((file) => JSON.stringify(file.path));
+    if (files.length) console.warn(`warning: ${pkg.hash} contains foreign code (${files.join(", ")}); it can run host code and Bend proofs do not cover it. Inspect before running.`);
+  }
 }
 
 async function lock(): Promise<void> {
@@ -133,6 +141,7 @@ async function lock(): Promise<void> {
       die(`unmanaged import: ${item.hash}/${item.entry}`);
   }
   const packages = await packageGraph(Object.values(dependencies).map((r) => r.hash));
+  warnForeign(packages);
   fs.writeFileSync(LOCK, JSON.stringify({ format: 1, bend: project.project.bend, dependencies, packages }, null, 2) + "\n");
   console.log(`locked ${packages.length} packages`);
 }
@@ -212,6 +221,7 @@ async function install(args: string[]): Promise<void> {
     if (imported.size !== pkg.dependencies.length || pkg.dependencies.some((d) => !imported.has(d)))
       die(`stale transitive graph: ${pkg.hash}`);
   }
+  warnForeign(data.packages);
   for (const { file, imports: used } of sources) {
     if (used.length && !check(file)) die(`Bend check failed: ${file}`);
   }
@@ -353,17 +363,26 @@ async function update(names: string[]): Promise<void> {
   if (!changed.length) console.log("up to date");
 }
 
-function list(): void {
+async function list(): Promise<void> {
   const all = releases();
   const byHash = new Map(all.map((r) => [r.hash, r]));
+  const hashes = new Set<string>();
   for (const file of bendFiles()) {
     rewrite(file, (hash, alias) => {
       const r = byHash.get(hash);
+      hashes.add(hash);
       const latest = r && pick(all, r.name).version;
       console.log(`${file}: ${alias} ` + (!r ? `${hash} (not in index)`
         : `${r.name}@${r.version}` + (latest !== r.version ? ` (latest ${latest})` : "")));
       return undefined;
     });
+  }
+  if (hashes.size) {
+    try {
+      warnForeign(await packageGraph([...hashes], false));
+    } catch (error) {
+      console.warn("warning: foreign-code status unknown: " + JSON.stringify(String(error)));
+    }
   }
 }
 
@@ -380,6 +399,11 @@ async function publish(args: string[]): Promise<void> {
   if (out.status !== 0) die("bend --publish failed");
   const m = out.stdout.match(/^import (0x[0-9a-f]+)\/(\S+) as /m);
   if (!m) die("unexpected bend output:\n" + out.stdout);
+  try {
+    warnForeign(await packageGraph([m[1]], false));
+  } catch (error) {
+    console.warn("warning: foreign-code status unknown: " + JSON.stringify(String(error)));
+  }
   const res = await fetch(REGISTRY + "/publish", {
     method: "POST",
     headers: { authorization: "Bearer " + token, "content-type": "application/json" },
