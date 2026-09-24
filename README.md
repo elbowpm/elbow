@@ -15,7 +15,7 @@ The script downloads the binary for your platform from the latest [GitHub releas
 In automation, pin a version instead:
 
 ```sh
-version=0.2.0 target=linux-x64 # or linux-arm64, darwin-arm64, darwin-x64
+version=0.3.0 target=linux-x64 # or linux-arm64, darwin-arm64, darwin-x64
 name="elbow-${version}-${target}"
 curl -fsSLO "https://github.com/elbowpm/elbow/releases/download/v${version}/${name}.tar.gz"
 curl -fsSLO "https://github.com/elbowpm/elbow/releases/download/v${version}/${name}.tar.gz.sha256"
@@ -83,6 +83,8 @@ bend = "2.0.25"
 }
 ```
 Commit both files and the updated `.bend` imports. `install --locked` can run without the registry or hub when the Bend cache already contains the verified bytes. A registry outage does not change a hash-pinned Bend program.
+
+When you no longer use a package, remove its calls from your `.bend` files, then run `elbow remove encoding`. Elbow removes its managed imports, updates `elbow.toml` and `elbow.lock`, and restores those files if Bend checking fails. It does not delete the global Bend cache.
 
 ## Publish
 

@@ -57,6 +57,11 @@ function saveManifest(value: Manifest): void {
     const match = line.match(/^(\s*(?:"([^"]+)"|([a-z][a-z0-9-]*))\s*=\s*)("(?:\\.|[^"])*"|'[^']*')(\s*(?:#.*)?)$/);
     if (!match) die("unsupported dependency line in elbow.toml: " + line);
     const name = match[2] ?? match[3];
+    if (!Object.hasOwn(value.dependencies, name)) {
+      lines.splice(i--, 1);
+      end--;
+      continue;
+    }
     seen.add(name);
     lines[i] = match[1] + JSON.stringify(value.dependencies[name]) + match[5];
   }
@@ -235,6 +240,7 @@ const HELP = `elbow: names and versions for Bend hub packages.
 
 usage:
   elbow add <name>[@range]... [file] [--as Alias] add imports, manifest, lock (file: main.bend)
+  elbow remove <name>                           remove direct dependency and its imports
   elbow update [name...]                         update within manifest ranges
   elbow lock                                     record exact dependency graph from source imports
   elbow install --locked                         verify and fetch locked packages (no registry)
@@ -363,6 +369,40 @@ async function update(names: string[]): Promise<void> {
   if (!changed.length) console.log("up to date");
 }
 
+async function remove(args: string[]): Promise<void> {
+  if (args.length !== 1 || !fs.existsSync(MANIFEST) || !fs.existsSync(LOCK))
+    die("usage: elbow remove <name> (requires elbow.toml and elbow.lock)");
+  const [name] = args;
+  const project = manifest();
+  if (!Object.hasOwn(project.dependencies, name)) die(`undeclared package: ${name}`);
+  const dependencies = (JSON.parse(fs.readFileSync(LOCK, "utf8")) as Lock).dependencies;
+  const locked = dependencies?.[name];
+  if (!locked || locked.range !== project.dependencies[name]) die(`stale lock entry: ${name}`);
+  const affected = new Set<string>();
+  if (!Object.entries(dependencies).some(([other, dep]) =>
+    other !== name && dep.hash === locked.hash && dep.entry === locked.entry)) {
+    for (const file of bendFiles()) {
+      const lines = fs.readFileSync(file, "utf8").split("\n");
+      let changed = false;
+      for (let i = 0; i < lines.length && HEADER.test(lines[i]); i++) {
+        if (path.posix.normalize(lines[i].match(IMPORT_LINE)?.[2] ?? "") === `${locked.hash}/${locked.entry}`) {
+          lines.splice(i--, 1);
+          changed = true;
+        }
+      }
+      if (changed) {
+        fs.writeFileSync(file, lines.join("\n"));
+        affected.add(file);
+      }
+    }
+  }
+  delete project.dependencies[name];
+  saveManifest(project);
+  for (const file of affected) if (!check(file)) die(`Bend check failed: ${file}`);
+  await lock();
+  console.log(`removed ${name}`);
+}
+
 async function list(): Promise<void> {
   const all = releases();
   const byHash = new Map(all.map((r) => [r.hash, r]));
@@ -415,12 +455,12 @@ async function publish(args: string[]): Promise<void> {
 }
 
 const [cmd, ...rest] = process.argv.slice(2);
-const cmds: Record<string, (a: string[]) => void | Promise<void>> = { add, update, list: () => list(), lock, install, publish };
+const cmds: Record<string, (a: string[]) => void | Promise<void>> = { add, remove, update, list: () => list(), lock, install, publish };
 if (!cmd || !cmds[cmd]) {
   console.log(HELP);
   process.exit(cmd && cmd !== "help" && cmd !== "--help" ? 1 : 0);
 }
-const transactional = cmd === "add" || cmd === "update";
+const transactional = cmd === "add" || cmd === "remove" || cmd === "update";
 const originals = new Map<string, Buffer | undefined>();
 if (transactional) {
   for (const file of [...bendFiles(), MANIFEST, LOCK])
