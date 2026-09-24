@@ -50,6 +50,13 @@ jobs:
           "$RUNNER_TEMP/elbow" install --locked 2> "$tmp/clean.err"
           bun -e 'if ((await Bun.file(process.argv[1]).text()).includes("foreign code")) process.exit(1)' "$tmp/clean.err"
           test "$(bend main.bend)" = 97
+          before="$(sha256sum main.bend elbow.toml elbow.lock)"
+          if "$RUNNER_TEMP/elbow" remove encoding; then exit 1; fi
+          test "$before" = "$(sha256sum main.bend elbow.toml elbow.lock)"
+          printf 'import Base\n\ndef main() -> U32:\n  1\n' > main.bend
+          "$RUNNER_TEMP/elbow" remove encoding
+          bun -e 'const lock = await Bun.file("elbow.lock").json(); if (Object.keys(lock.dependencies).length || lock.packages.length || (await Bun.file("elbow.toml").text()).includes("\"encoding\"")) process.exit(1)'
+          test "$(bend main.bend)" = 1
           "$RUNNER_TEMP/elbow" add http@0.9.2 2> "$tmp/add.err"
           "$RUNNER_TEMP/elbow" install --locked 2> "$tmp/install.err"
           "$RUNNER_TEMP/elbow" list > "$tmp/list.out" 2> "$tmp/list.err"
